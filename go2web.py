@@ -71,6 +71,12 @@ def make_http_request(url):
 
     print(clean_text)
 
+def build_search_url(search_terms):
+    query = "+".join(search_terms)
+    search_url = f"http://duckduckgo.com/html/?q={query}"
+
+    return search_url
+
 
 def main():
     parser = argparse.ArgumentParser(add_help=False)
@@ -88,8 +94,9 @@ def main():
         make_http_request(args.url)
 
     elif args.search:
-        search_term = " ".join(args.search)
-        print(f"Search not implemented yet: {search_term}")
+        search_url = build_search_url(args.search)
+        print("Search request prepared")
+        print(f"Search URL: {search_url}")
 
     else:
         show_help()
