@@ -4,6 +4,7 @@ import re
 import urllib
 import ssl
 from urllib.parse import urlparse
+from bs4 import BeautifulSoup
 
 
 def show_help():
@@ -50,7 +51,7 @@ def make_http_request(url):
 
     client_socket.connect((host, port))
 
-    request = f"GET {path} HTTP/1.1\r\n"
+    request = f"GET {path} HTTP/1.0\r\n"
     request += f"Host: {host}\r\n"
     request += "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36\r\n"
     request += "Accept: text/html\r\n"
@@ -128,7 +129,12 @@ def main():
         show_help()
 
     elif args.url:
-        make_http_request(args.url)
+        raw_body = make_http_request(args.url)
+        soup = BeautifulSoup(raw_body, "html.parser")
+        for script_or_style in soup(["script", "style"]):
+            script_or_style.decompose()
+        clean_text = soup.get_text(separator="\n", strip=True)
+        print(clean_text)
 
     elif args.search:
         perform_search(args.search)
