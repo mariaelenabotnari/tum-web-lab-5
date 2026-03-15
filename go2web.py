@@ -35,25 +35,22 @@ def parse_url(url):
 def make_http_request(url, redirect_count=0):
     ensure_cache_dir()
 
-    cached_response = load_from_cache(url)
-    if cached_response is not None:
+    cached_data = load_from_cache(url)
+    if cached_data is not None:
         print(f"Loading from cache: {url}")
-        return cached_response
+        return cached_data
 
     if redirect_count > 5:
         print("Too many redirects.")
-        return ""
+        return "", ""
 
     parsed = urlparse(url)
-
     host = parsed.netloc
     path = parsed.path if parsed.path else "/"
-
     if parsed.query:
         path += "?" + parsed.query
 
     scheme = parsed.scheme
-
     if scheme == "https":
         port = 443
     else:
@@ -72,15 +69,13 @@ def make_http_request(url, redirect_count=0):
     request = f"GET {path} HTTP/1.0\r\n"
     request += f"Host: {host}\r\n"
     request += "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36\r\n"
-    request += "Accept: text/html\r\n"
+    request += "Accept: text/html, application/json\r\n"
     request += "Accept-Encoding: identity\r\n"
     request += "Connection: close\r\n"
     request += "\r\n"
 
     client_socket.send(request.encode())
-
     response = b""
-
     while True:
         data = client_socket.recv(4096)
         if not data:
@@ -90,7 +85,6 @@ def make_http_request(url, redirect_count=0):
     client_socket.close()
 
     decoded_response = response.decode(errors="ignore")
-
     response_parts = decoded_response.split("\r\n\r\n", 1)
 
     if len(response_parts) == 2:
@@ -108,15 +102,15 @@ def make_http_request(url, redirect_count=0):
 
     if "301" in status_line or "302" in status_line:
         location_match = re.search(r"Location: (.+)", headers)
-
         if location_match:
             redirect_url = location_match.group(1).strip()
             print(f"Redirecting to: {redirect_url}")
             return make_http_request(redirect_url, redirect_count + 1)
 
-    save_to_cache(url, body)
+    full_content = headers + "\r\n\r\n" + body
+    save_to_cache(url, full_content)
 
-    return body
+    return headers, body
 
 
 def build_search_url(search_terms):
@@ -142,16 +136,14 @@ def extract_links(html_text):
 
 def perform_search(search_terms):
     search_url = build_search_url(search_terms)
-
     print(f"Searching for: {' '.join(search_terms)}")
 
-    html_text = make_http_request(search_url)
+    # Unpack both headers and body
+    _, html_text = make_http_request(search_url)
 
     links = extract_links(html_text)
     save_search_results(links)
-
     print("\nTop results:")
-
     for i, link in enumerate(links[:10], start=1):
         print(f"{i}. {link}")
 
@@ -188,59 +180,60 @@ def get_cache_filename(url):
 
 def load_from_cache(url):
     cache_file = get_cache_filename(url)
-
     if os.path.exists(cache_file):
-        with open(cache_file, "r", encoding="utf-8") as file:
-            return file.read()
-
+        with open(cache_file, "r", encoding="utf-8", newline='') as file:
+            data = file.read()
+            parts = re.split(r'\r?\n\r?\n', data, maxsplit=1)
+            if len(parts) == 2:
+                return parts[0], parts[1]
     return None
 
 
 def save_to_cache(url, content):
     cache_file = get_cache_filename(url)
 
-    with open(cache_file, "w", encoding="utf-8") as file:
+    with open(cache_file, "w", encoding="utf-8", newline='') as file:
         file.write(content)
 
 
 def main():
     parser = argparse.ArgumentParser(add_help=False)
-
     parser.add_argument("-u", "--url", type=str)
     parser.add_argument("-s", "--search", nargs="+")
     parser.add_argument("-h", "--help", action="store_true")
-
     args = parser.parse_args()
 
     if args.help:
         show_help()
-
     elif args.url:
         url_to_open = args.url
-
         if args.url.isdigit():
             selected_index = int(args.url)
             saved_link = load_search_result_by_index(selected_index)
-
             if saved_link is None:
-                print("Invalid result number or no saved search results found.")
+                print("Invalid result number.")
                 return
-
             url_to_open = saved_link
             print(f"Opening saved result #{selected_index}: {url_to_open}")
 
-        raw_body = make_http_request(url_to_open)
-        soup = BeautifulSoup(raw_body, "html.parser")
+        headers, raw_body = make_http_request(url_to_open)
 
-        for script_or_style in soup(["script", "style"]):
-            script_or_style.decompose()
-
-        clean_text = soup.get_text(separator="\n", strip=True)
-        print(clean_text)
+        if "application/json" in headers.lower():
+            try:
+                import json
+                json_data = json.loads(raw_body)
+                print("\nJSON Content Detected\n")
+                print(json.dumps(json_data, indent=4))
+            except json.JSONDecodeError:
+                print("Error: Could not parse JSON.")
+        else:
+            soup = BeautifulSoup(raw_body, "html.parser")
+            for script_or_style in soup(["script", "style"]):
+                script_or_style.decompose()
+            print(soup.get_text(separator="\n", strip=True))
 
     elif args.search:
         perform_search(args.search)
-
     else:
         show_help()
 
