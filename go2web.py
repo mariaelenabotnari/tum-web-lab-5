@@ -1,4 +1,5 @@
 import argparse
+import socket
 from urllib.parse import urlparse
 
 
@@ -22,11 +23,31 @@ def parse_url(url):
 def make_http_request(url):
     host, path = parse_url(url)
 
-    print("Preparing HTTP request")
-    print(f"Host: {host}")
-    print(f"Path: {path}")
+    port = 80
 
-    print("HTTP request logic will be implemented here.")
+    print(f"Connecting to {host}...")
+
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.connect((host, port))
+
+    request = f"GET {path} HTTP/1.1\r\n"
+    request += f"Host: {host}\r\n"
+    request += "Connection: close\r\n"
+    request += "\r\n"
+
+    client_socket.send(request.encode())
+
+    response = b""
+
+    while True:
+        data = client_socket.recv(4096)
+        if not data:
+            break
+        response += data
+
+    client_socket.close()
+
+    print(response.decode(errors="ignore"))
 
 
 def main():
@@ -42,7 +63,7 @@ def main():
         show_help()
 
     elif args.url:
-        print(f"URL request not implemented yet: {args.url}")
+        make_http_request(args.url)
 
     elif args.search:
         search_term = " ".join(args.search)
