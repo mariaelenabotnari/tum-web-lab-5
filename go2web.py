@@ -24,7 +24,10 @@ def parse_url(url):
 
     return host, path
 
-def make_http_request(url):
+def make_http_request(url, redirect_count=0):
+    if redirect_count > 5:
+        print("Too many redirects.")
+        return ""
 
     parsed = urlparse(url)
 
@@ -76,9 +79,25 @@ def make_http_request(url):
     response_parts = decoded_response.split("\r\n\r\n", 1)
 
     if len(response_parts) == 2:
+        headers = response_parts[0]
         body = response_parts[1]
     else:
-        body = decoded_response
+        headers = decoded_response
+        body = ""
+
+    if "Transfer-Encoding: chunked" in headers:
+        # Removes any line that is purely hexadecimal
+        body = re.sub(r'^[0-9a-fA-F]+\r\n', '', body, flags=re.MULTILINE)
+
+    status_line = headers.split("\r\n")[0]
+
+    if "301" in status_line or "302" in status_line:
+        location_match = re.search(r"Location: (.+)", headers)
+
+        if location_match:
+            redirect_url = location_match.group(1).strip()
+            print(f"Redirecting to: {redirect_url}")
+            return make_http_request(redirect_url, redirect_count + 1)
 
     return body
 
