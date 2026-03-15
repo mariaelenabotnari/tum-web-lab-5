@@ -6,6 +6,7 @@ import ssl
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 
+SEARCH_RESULTS_FILE = "last_search_results.txt"
 
 def show_help():
     print("go2web -u <URL>         make an HTTP request to the specified URL")
@@ -128,11 +129,30 @@ def perform_search(search_terms):
     html_text = make_http_request(search_url)
 
     links = extract_links(html_text)
+    save_search_results(links)
 
     print("\nTop results:")
 
     for i, link in enumerate(links[:10], start=1):
         print(f"{i}. {link}")
+
+def save_search_results(links):
+    with open(SEARCH_RESULTS_FILE, "w", encoding="utf-8") as file:
+        for link in links:
+            file.write(link + "\n")
+
+def load_search_result_by_index(index):
+    try:
+        with open(SEARCH_RESULTS_FILE, "r", encoding="utf-8") as file:
+            links = [line.strip() for line in file.readlines() if line.strip()]
+
+        if 1 <= index <= len(links):
+            return links[index - 1]
+        else:
+            return None
+
+    except FileNotFoundError:
+        return None
 
 
 def main():
@@ -148,10 +168,25 @@ def main():
         show_help()
 
     elif args.url:
-        raw_body = make_http_request(args.url)
+        url_to_open = args.url
+
+        if args.url.isdigit():
+            selected_index = int(args.url)
+            saved_link = load_search_result_by_index(selected_index)
+
+            if saved_link is None:
+                print("Invalid result number or no saved search results found.")
+                return
+
+            url_to_open = saved_link
+            print(f"Opening saved result #{selected_index}: {url_to_open}")
+
+        raw_body = make_http_request(url_to_open)
         soup = BeautifulSoup(raw_body, "html.parser")
+
         for script_or_style in soup(["script", "style"]):
             script_or_style.decompose()
+
         clean_text = soup.get_text(separator="\n", strip=True)
         print(clean_text)
 
