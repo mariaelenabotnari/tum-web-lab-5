@@ -3,15 +3,21 @@ import socket
 import re
 import urllib
 import ssl
+import os
+import hashlib
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 
+
 SEARCH_RESULTS_FILE = "last_search_results.txt"
+CACHE_DIR = "cache"
+
 
 def show_help():
     print("go2web -u <URL>         make an HTTP request to the specified URL")
     print("go2web -s <search-term> search the term using a search engine")
     print("go2web -h               show this help")
+
 
 def parse_url(url):
     parsed_url = urlparse(url)
@@ -25,7 +31,15 @@ def parse_url(url):
 
     return host, path
 
+
 def make_http_request(url, redirect_count=0):
+    ensure_cache_dir()
+
+    cached_response = load_from_cache(url)
+    if cached_response is not None:
+        print(f"Loading from cache: {url}")
+        return cached_response
+
     if redirect_count > 5:
         print("Too many redirects.")
         return ""
@@ -100,13 +114,17 @@ def make_http_request(url, redirect_count=0):
             print(f"Redirecting to: {redirect_url}")
             return make_http_request(redirect_url, redirect_count + 1)
 
+    save_to_cache(url, body)
+
     return body
+
 
 def build_search_url(search_terms):
     query = "+".join(search_terms)
     search_url = f"https://html.duckduckgo.com/html/?q={query}"
 
     return search_url
+
 
 def extract_links(html_text):
     matches = re.findall(r'uddg=([^&"]+)', html_text)
@@ -120,6 +138,7 @@ def extract_links(html_text):
     links = list(dict.fromkeys(links))
 
     return links
+
 
 def perform_search(search_terms):
     search_url = build_search_url(search_terms)
@@ -136,10 +155,12 @@ def perform_search(search_terms):
     for i, link in enumerate(links[:10], start=1):
         print(f"{i}. {link}")
 
+
 def save_search_results(links):
     with open(SEARCH_RESULTS_FILE, "w", encoding="utf-8") as file:
         for link in links:
             file.write(link + "\n")
+
 
 def load_search_result_by_index(index):
     try:
@@ -153,6 +174,33 @@ def load_search_result_by_index(index):
 
     except FileNotFoundError:
         return None
+
+
+def ensure_cache_dir():
+    if not os.path.exists(CACHE_DIR):
+        os.makedirs(CACHE_DIR)
+
+
+def get_cache_filename(url):
+    url_hash = hashlib.md5(url.encode()).hexdigest()
+    return os.path.join(CACHE_DIR, f"{url_hash}.txt")
+
+
+def load_from_cache(url):
+    cache_file = get_cache_filename(url)
+
+    if os.path.exists(cache_file):
+        with open(cache_file, "r", encoding="utf-8") as file:
+            return file.read()
+
+    return None
+
+
+def save_to_cache(url, content):
+    cache_file = get_cache_filename(url)
+
+    with open(cache_file, "w", encoding="utf-8") as file:
+        file.write(content)
 
 
 def main():

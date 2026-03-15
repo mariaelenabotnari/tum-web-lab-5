@@ -18,3 +18,5 @@ dist/
 *.egg-info/
 
 last_search_results.txt
+
+cache/
