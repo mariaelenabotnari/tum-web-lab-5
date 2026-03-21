@@ -5,6 +5,7 @@ import urllib
 import ssl
 import os
 import hashlib
+import json
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 
@@ -220,7 +221,6 @@ def main():
 
         if "application/json" in headers.lower():
             try:
-                import json
                 json_data = json.loads(raw_body)
                 print("\nJSON Content Detected\n")
                 print(json.dumps(json_data, indent=4))
