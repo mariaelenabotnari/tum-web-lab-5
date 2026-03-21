@@ -5,6 +5,7 @@ import urllib
 import ssl
 import os
 import hashlib
+import json
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 
@@ -17,19 +18,6 @@ def show_help():
     print("go2web -u <URL>         make an HTTP request to the specified URL")
     print("go2web -s <search-term> search the term using a search engine")
     print("go2web -h               show this help")
-
-
-def parse_url(url):
-    parsed_url = urlparse(url)
-
-    host = parsed_url.netloc
-
-    if parsed_url.path:
-        path = parsed_url.path
-    else:
-        path = "/"
-
-    return host, path
 
 
 def make_http_request(url, redirect_count=0):
@@ -220,7 +208,6 @@ def main():
 
         if "application/json" in headers.lower():
             try:
-                import json
                 json_data = json.loads(raw_body)
                 print("\nJSON Content Detected\n")
                 print(json.dumps(json_data, indent=4))
