@@ -6,8 +6,10 @@ import ssl
 import os
 import hashlib
 import json
+import time
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
+from urllib.parse import urljoin
 
 
 SEARCH_RESULTS_FILE = "last_search_results.txt"
@@ -92,11 +94,13 @@ def make_http_request(url, redirect_count=0):
         location_match = re.search(r"Location: (.+)", headers)
         if location_match:
             redirect_url = location_match.group(1).strip()
+
+            redirect_url = urljoin(url, redirect_url)
+
             print(f"Redirecting to: {redirect_url}")
             return make_http_request(redirect_url, redirect_count + 1)
 
-    full_content = headers + "\r\n\r\n" + body
-    save_to_cache(url, full_content)
+    save_to_cache(url, headers, body)
 
     return headers, body
 
@@ -168,20 +172,49 @@ def get_cache_filename(url):
 
 def load_from_cache(url):
     cache_file = get_cache_filename(url)
-    if os.path.exists(cache_file):
-        with open(cache_file, "r", encoding="utf-8", newline='') as file:
-            data = file.read()
-            parts = re.split(r'\r?\n\r?\n', data, maxsplit=1)
-            if len(parts) == 2:
-                return parts[0], parts[1]
-    return None
+
+    if not os.path.exists(cache_file):
+        return None
+
+    with open(cache_file, "r", encoding="utf-8") as f:
+        cache_data = json.load(f)
+
+    headers = cache_data["headers"]
+    body = cache_data["body"]
+    timestamp = cache_data["timestamp"]
+
+    cache_control = re.search(r"Cache-Control: (.+)", headers, re.IGNORECASE)
+
+    if cache_control:
+        value = cache_control.group(1).lower()
+
+        if "no-store" in value:
+            return None
+
+        if "no-cache" in value:
+            return None
+
+        max_age_match = re.search(r"max-age=(\d+)", value)
+        if max_age_match:
+            max_age = int(max_age_match.group(1))
+            if time.time() - timestamp > max_age:
+                print("Cache expired.")
+                return None
+
+    return headers, body
 
 
-def save_to_cache(url, content):
+def save_to_cache(url, headers, body):
     cache_file = get_cache_filename(url)
 
-    with open(cache_file, "w", encoding="utf-8", newline='') as file:
-        file.write(content)
+    cache_data = {
+        "timestamp": time.time(),
+        "headers": headers,
+        "body": body
+    }
+
+    with open(cache_file, "w", encoding="utf-8") as f:
+        json.dump(cache_data, f)
 
 
 def main():
